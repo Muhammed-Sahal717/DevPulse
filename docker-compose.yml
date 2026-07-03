@@ -1,0 +1,16 @@
+services:
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: devpulse_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: sahal
+      POSTGRES_PASSWORD: sahalprojects9078
+      POSTGRES_DB: devpulse_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
