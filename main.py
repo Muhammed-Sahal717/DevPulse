@@ -1,10 +1,24 @@
 from fastapi import Depends, FastAPI, HTTPException, Query
-from sqlmodel import Session, SQLModel, select
+from sqlmodel import Session, select
 
-from database import engine, get_session
+from database import get_session
 
 # Import models so SQLModel registers them
-from models import DailyLog, DailyLogCreate, Project, ProjectCreate, Task, TaskCreate
+from models import (
+    DailyLog,
+    DailyLogCreate,
+    Project,
+    ProjectCreate,
+    Task,
+    TaskCreate,
+    TokenResponse,
+    User,
+    UserCreate,
+    UserResponse,
+)
+
+# Import security helper blocks
+from security import create_access_token, hash_password, verify_password
 
 app = FastAPI(
     title="DevPulse",
@@ -28,6 +42,52 @@ async def root():
     }
 
 
+# REGISTER A NEW USER
+@app.post("/auth/register", response_model=UserResponse, status_code=201)
+def register_user(user_data: UserCreate, session: Session = Depends(get_session)):
+    # 1. DEFENSIVE CHECK: Verify email isn't already taken
+    existing_user = session.exec(
+        select(User).where(User.email == user_data.email)
+    ).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=400, detail="A user with this email already exists."
+        )
+
+    # 2. Cryptographically hash the plain text input password
+    secure_hash = hash_password(user_data.password)
+
+    # 3. Save the secure user profile instance to the database container
+    db_user = User(email=user_data.email, hashed_password=secure_hash)
+    session.add(db_user)
+    session.commit()
+    session.refresh(db_user)
+
+    return db_user
+
+
+# LOGIN & GENERATE SECURITY AUTHENTICATION TOKEN
+@app.post("/auth/login", response_model=TokenResponse)
+def login_user(user_data: UserCreate, session: Session = Depends(get_session)):
+    # 1. Find user by email profile query match
+    user = session.exec(select(User).where(User.email == user_data.email)).first()
+    if not user:
+        raise HTTPException(
+            status_code=400, detail="Invalid email or password credentials."
+        )
+
+    # 2. Verify incoming password text against database hash footprint match
+    if not verify_password(user_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=400, detail="Invalid email or password credentials."
+        )
+
+    # 3. Generate secure access verification token signature claims payload
+    token = create_access_token(data={"sub": str(user.id), "email": user.email})
+
+    return {"access_token": token, "token_type": "bearer"}
+
+
 # NEW ROUTE: Create a brand new project record
 @app.post("/projects", response_model=Project, status_code=201)
 def create_project(
@@ -36,6 +96,13 @@ def create_project(
         get_session
     ),  # This line uses FastAPI's dependency injection to provide a database session to the route handler
 ):
+    # DEFENSIVE CHECK: Verify the owning user actually exists first
+    owner_user = session.get(User, project_data.user_id)
+    if not owner_user:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Cannot create project. User with ID {project_data.user_id} does not exist.",
+        )
     # 1. Convert the inbound ProjectCreate validation object into a true Project DB entry
     db_project = Project.model_validate(project_data)
 
