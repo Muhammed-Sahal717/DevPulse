@@ -126,10 +126,14 @@ def read_projects(
         default=10, le=100
     ),  # Default 10 records, maximum 100, le means "less than or equal to"
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
     # 1. Construct an SQL SELECT statement
     statement = (
-        select(Project).offset(offset).limit(limit)
+        select(Project)
+        .where(Project.user_id == current_user.id)
+        .offset(offset)
+        .limit(limit)
     )  # It means "skip the first 'offset' records and then take the next 'limit' records"
 
     # 2. Execute the query against PostgreSQL and collect the results
@@ -143,7 +147,11 @@ def read_projects(
 
 # GET A SINGLE PROJECT BY ID (With Clean Error Handling)
 @app.get("/projects/{project_id}", response_model=Project)
-def read_project(project_id: int, session: Session = Depends(get_session)):
+def read_project(
+    project_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     # This line uses FastAPI's dependency injection to provide a database session to the route handler
 
     # 1. Search the table directly using the primary key ID
@@ -152,9 +160,10 @@ def read_project(project_id: int, session: Session = Depends(get_session)):
     )  # Can search by primary key directly, and also returns None if the record doesn't exist
 
     # 2. DEFENSIVE PROGRAMMING: If the ID doesn't exist, raise a clean HTTP 404 Exception
-    if not project:
+    if not project or project.user_id != current_user.id:
         raise HTTPException(
-            status_code=404, detail=f"Project with ID {project_id} not found"
+            status_code=404,
+            detail=f"Project with ID {project_id} not found or unauthorized.",
         )
 
     # 3. Otherwise, return the target record data
@@ -162,13 +171,17 @@ def read_project(project_id: int, session: Session = Depends(get_session)):
 
 
 @app.post("/tasks", response_model=Task, status_code=201)
-def create_task(task_data: TaskCreate, session: Session = Depends(get_session)):
+def create_task(
+    task_data: TaskCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     # 1. DEFENSIVE CHECK: Verify the parent project actually exists first
     parent_project = session.get(Project, task_data.project_id)
-    if not parent_project:
+    if not parent_project or parent_project.user_id != current_user.id:
         raise HTTPException(
             status_code=404,
-            detail=f"Cannot create task. Project with ID {task_data.project_id} does not exist.",
+            detail="Cannot create task. Associated project does not exist or is unauthorized.",
         )
 
     # 2. Convert schema data to database record model
@@ -184,12 +197,17 @@ def create_task(task_data: TaskCreate, session: Session = Depends(get_session)):
 
 # GET ALL TASKS FOR A SPECIFIC PROJECT
 @app.get("/projects/{project_id}/tasks", response_model=list[Task])
-def read_project_tasks(project_id: int, session: Session = Depends(get_session)):
+def read_project_tasks(
+    project_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     # 1. Check if the project exists
     project = session.get(Project, project_id)
-    if not project:
+    if not project or project.user_id != current_user.id:
         raise HTTPException(
-            status_code=404, detail=f"Project with ID {project_id} not found"
+            status_code=404,
+            detail="Project not found or unauthorized.",
         )
 
     # 2. Return the tasks list directly via our SQLModel Relationship back-population!
@@ -197,14 +215,18 @@ def read_project_tasks(project_id: int, session: Session = Depends(get_session))
 
 
 @app.post("/logs", response_model=DailyLog, status_code=200)
-def create_daily_log(log_data: DailyLogCreate, session: Session = Depends(get_session)):
+def create_daily_log(
+    log_data: DailyLogCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
 
     # 1. DEFENSIVE CHECK: Verify the target project exists
     project = session.get(Project, log_data.project_id)
-    if not project:
+    if not project or project.user_id != current_user.id:
         raise HTTPException(
             status_code=404,
-            detail=f"Project with ID {log_data.project_id} does not exist.",
+            detail="Cannot create log. Associated project does not exist or is unauthorized.",
         )
 
     # 2. Convert and stage
@@ -222,6 +244,13 @@ def read_daily_logs(
     offset: int = 0,
     limit: int = Query(default=30, le=100),  # Default to last 30 logs (approx a month)
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
-    statement = select(DailyLog).offset(offset).limit(limit)
+    statement = (
+        select(DailyLog)
+        .join(Project)
+        .where(DailyLog.user_id == current_user.id)
+        .offset(offset)
+        .limit(limit)
+    )
     return session.exec(statement).all()
