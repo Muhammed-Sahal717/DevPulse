@@ -2,7 +2,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
-from aggregator import fetch_mock_repository_stats
+from aggregator import fetch_data_repository_stats
 from database import get_current_user, get_session
 from email_service import send_reset_password_email
 
@@ -183,7 +183,7 @@ def read_project(
     # If a repository URL exists, enqueue the background synchronization routine.
     # This sends the response to the user instantly while running the task in the background.
     if project.repository_url:
-        background_tasks.add_task(fetch_mock_repository_stats, project.id)
+        background_tasks.add_task(fetch_data_repository_stats, project.id)
 
     # 3. Otherwise, return the target record data
     return project
