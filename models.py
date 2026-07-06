@@ -46,6 +46,11 @@ class Project(SQLModel, table=True):
     repository_url: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    # Additional fields for GitHub repository data
+    stars_count: int = Field(default=0)
+    open_issues_count: int = Field(default=0)
+    last_commit_message: Optional[str] = Field(default=None)
+
     # FOREIGN KEY: Links this project to the specific User who owns it
     user_id: int = Field(foreign_key="user.id", ondelete="CASCADE")
 

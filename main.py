@@ -1,7 +1,8 @@
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
+from aggregator import fetch_mock_repository_stats
 from database import get_current_user, get_session
 from email_service import send_reset_password_email
 
@@ -160,6 +161,7 @@ def read_projects(
 @app.get("/projects/{project_id}", response_model=Project)
 def read_project(
     project_id: int,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -176,6 +178,12 @@ def read_project(
             status_code=404,
             detail=f"Project with ID {project_id} not found or unauthorized.",
         )
+
+    # TRIGGER BACKGROUND ASYNC SYNC:
+    # If a repository URL exists, enqueue the background synchronization routine.
+    # This sends the response to the user instantly while running the task in the background.
+    if project.repository_url:
+        background_tasks.add_task(fetch_mock_repository_stats, project.id)
 
     # 3. Otherwise, return the target record data
     return project
