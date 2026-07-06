@@ -54,7 +54,6 @@ class ProjectCreate(
     name: str
     description: Optional[str] = None
     repository_url: Optional[str] = None
-    user_id: int
 
 
 class Task(SQLModel, table=True):

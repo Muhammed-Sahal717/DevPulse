@@ -1,7 +1,8 @@
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
-from database import get_session
+from database import get_current_user, get_session
 
 # Import models so SQLModel registers them
 from models import (
@@ -68,16 +69,19 @@ def register_user(user_data: UserCreate, session: Session = Depends(get_session)
 
 # LOGIN & GENERATE SECURITY AUTHENTICATION TOKEN
 @app.post("/auth/login", response_model=TokenResponse)
-def login_user(user_data: UserCreate, session: Session = Depends(get_session)):
+def login_user(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    session: Session = Depends(get_session),
+):
     # 1. Find user by email profile query match
-    user = session.exec(select(User).where(User.email == user_data.email)).first()
+    user = session.exec(select(User).where(User.email == form_data.username)).first()
     if not user:
         raise HTTPException(
             status_code=400, detail="Invalid email or password credentials."
         )
 
     # 2. Verify incoming password text against database hash footprint match
-    if not verify_password(user_data.password, user.hashed_password):
+    if not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=400, detail="Invalid email or password credentials."
         )
@@ -92,19 +96,14 @@ def login_user(user_data: UserCreate, session: Session = Depends(get_session)):
 @app.post("/projects", response_model=Project, status_code=201)
 def create_project(
     project_data: ProjectCreate,
-    session: Session = Depends(
-        get_session
-    ),  # This line uses FastAPI's dependency injection to provide a database session to the route handler
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
-    # DEFENSIVE CHECK: Verify the owning user actually exists first
-    owner_user = session.get(User, project_data.user_id)
-    if not owner_user:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Cannot create project. User with ID {project_data.user_id} does not exist.",
-        )
     # 1. Convert the inbound ProjectCreate validation object into a true Project DB entry
-    db_project = Project.model_validate(project_data)
+    db_project = Project.model_validate(
+        project_data, update={"user_id": current_user.id}
+    )
+    db_project.user_id = current_user.id
 
     # 2. Stage the object inside our current database session transaction
     session.add(db_project)

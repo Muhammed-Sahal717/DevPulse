@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import bcrypt
 import jwt
@@ -44,3 +45,14 @@ def create_access_token(data: dict) -> str:
     to_encode.update({"exp": expire})
     # Encode the payload into a JWT token using the secret and algorithm
     return jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
+
+
+def verify_access_token(token: str) -> Optional[dict]:
+    """Validates a JWT token string. Returns the decoded claims if valid, or None if invalid/expired."""
+    try:
+        # Decode and verify the signature + expiration time automatically
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+        return payload
+    except (jwt.PyJWTError, KeyError):
+        # Catches expired tokens, malformed signatures, or tampering attempts safely
+        return None
