@@ -4,7 +4,7 @@ from sqlmodel import Session, SQLModel, select
 from database import engine, get_session
 
 # Import models so SQLModel registers them
-from models import Project, ProjectCreate, Task, TaskCreate
+from models import DailyLog, DailyLogCreate, Project, ProjectCreate, Task, TaskCreate
 
 app = FastAPI(
     title="DevPulse",
@@ -115,17 +115,47 @@ def create_task(task_data: TaskCreate, session: Session = Depends(get_session)):
 
     return db_task
 
+
 # GET ALL TASKS FOR A SPECIFIC PROJECT
 @app.get("/projects/{project_id}/tasks", response_model=list[Task])
-def read_project_tasks(
-    project_id: int, session: Session = Depends(get_session)
-):
+def read_project_tasks(project_id: int, session: Session = Depends(get_session)):
     # 1. Check if the project exists
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(
             status_code=404, detail=f"Project with ID {project_id} not found"
-        )   
+        )
 
     # 2. Return the tasks list directly via our SQLModel Relationship back-population!
     return project.tasks
+
+
+@app.post("/logs", response_model=DailyLog, status_code=200)
+def create_daily_log(log_data: DailyLogCreate, session: Session = Depends(get_session)):
+
+    # 1. DEFENSIVE CHECK: Verify the target project exists
+    project = session.get(Project, log_data.project_id)
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project with ID {log_data.project_id} does not exist.",
+        )
+
+    # 2. Convert and stage
+    db_log = DailyLog.model_validate(log_data)
+    session.add(db_log)
+    session.commit()
+    session.refresh(db_log)
+
+    return db_log
+
+
+# GET ALL DAILY LOGS (With Pagination)
+@app.get("/logs", response_model=list[DailyLog])
+def read_daily_logs(
+    offset: int = 0,
+    limit: int = Query(default=30, le=100),  # Default to last 30 logs (approx a month)
+    session: Session = Depends(get_session),
+):
+    statement = select(DailyLog).offset(offset).limit(limit)
+    return session.exec(statement).all()

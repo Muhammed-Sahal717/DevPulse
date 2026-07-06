@@ -50,3 +50,28 @@ class TaskCreate(
     status: Optional[str] = "todo"
     priority: Optional[str] = "medium"
     project_id: int
+
+
+class DailyLog(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    date: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), index=True
+    )
+
+    lines_written: int = Field(default=0)
+    hours_spent: float = Field(default=0.0)
+    bugs_resolved: int = Field(default=0)
+    summary: str = Field(default="")
+
+    # Foreign key to the associated project
+    project_id: int = Field(foreign_key="project.id", ondelete="CASCADE")
+    # Relationship to the associated project
+    project: Project = Relationship()
+
+
+class DailyLogCreate(SQLModel):
+    lines_written: Optional[int] = 0
+    hours_spent: Optional[float] = 0.0
+    bugs_resolved: Optional[int] = 0
+    summary: str
+    project_id: int
