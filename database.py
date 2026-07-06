@@ -1,8 +1,16 @@
+import os
+
 from sqlmodel import Session, create_engine
 
-# 1. Define PostgreSQL connection string
-# Format: postgresql://[user]:[password]@[host]:[port]/[database_name]
-DATABASE_URL = "postgresql://sahal:sahalprojects9078@localhost:5432/devpulse_db"
+# 1. Fetch values from the environment variables engine
+DB_USER = os.getenv("DB_USER", "sahal")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "sahalprojects9078")
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "devpulse_db")
+
+# 2. Build the database connection string dynamically
+DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 # 2. Create the engine instance
 # This handles the low-level communication pool with Docker container

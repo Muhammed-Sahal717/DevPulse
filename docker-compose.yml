@@ -4,11 +4,11 @@ services:
     container_name: devpulse_postgres
     restart: always
     environment:
-      POSTGRES_USER: sahal
-      POSTGRES_PASSWORD: sahalprojects9078
-      POSTGRES_DB: devpulse_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
