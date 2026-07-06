@@ -4,7 +4,7 @@ from sqlmodel import Session, SQLModel, select
 from database import engine, get_session
 
 # Import models so SQLModel registers them
-from models import Project, ProjectCreate
+from models import Project, ProjectCreate, Task, TaskCreate
 
 app = FastAPI(
     title="DevPulse",
@@ -81,7 +81,9 @@ def read_project(project_id: int, session: Session = Depends(get_session)):
     # This line uses FastAPI's dependency injection to provide a database session to the route handler
 
     # 1. Search the table directly using the primary key ID
-    project = session.get(Project, project_id) # Can search by primary key directly, and also returns None if the record doesn't exist
+    project = session.get(
+        Project, project_id
+    )  # Can search by primary key directly, and also returns None if the record doesn't exist
 
     # 2. DEFENSIVE PROGRAMMING: If the ID doesn't exist, raise a clean HTTP 404 Exception
     if not project:
@@ -91,3 +93,39 @@ def read_project(project_id: int, session: Session = Depends(get_session)):
 
     # 3. Otherwise, return the target record data
     return project
+
+
+@app.post("/tasks", response_model=Task, status_code=201)
+def create_task(task_data: TaskCreate, session: Session = Depends(get_session)):
+    # 1. DEFENSIVE CHECK: Verify the parent project actually exists first
+    parent_project = session.get(Project, task_data.project_id)
+    if not parent_project:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Cannot create task. Project with ID {task_data.project_id} does not exist.",
+        )
+
+    # 2. Convert schema data to database record model
+    db_task = Task.model_validate(task_data)
+
+    # 3. Commit transactions
+    session.add(db_task)
+    session.commit()
+    session.refresh(db_task)
+
+    return db_task
+
+# GET ALL TASKS FOR A SPECIFIC PROJECT
+@app.get("/projects/{project_id}/tasks", response_model=list[Task])
+def read_project_tasks(
+    project_id: int, session: Session = Depends(get_session)
+):
+    # 1. Check if the project exists
+    project = session.get(Project, project_id)
+    if not project:
+        raise HTTPException(
+            status_code=404, detail=f"Project with ID {project_id} not found"
+        )   
+
+    # 2. Return the tasks list directly via our SQLModel Relationship back-population!
+    return project.tasks
