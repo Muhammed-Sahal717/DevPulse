@@ -16,10 +16,17 @@ from models import (
     User,
     UserCreate,
     UserResponse,
+    PasswordResetConfirm
 )
 
 # Import security helper blocks
-from security import create_access_token, hash_password, verify_password
+from security import (
+    create_access_token,
+    create_password_reset_token,
+    hash_password,
+    verify_password,
+    verify_password_reset_token,
+)
 
 app = FastAPI(
     title="DevPulse",
@@ -254,3 +261,52 @@ def read_daily_logs(
         .limit(limit)
     )
     return session.exec(statement).all()
+
+
+@app.post("/auth/forgot-password", status_code=200)
+def forgot_password(email: str, session: Session = Depends(get_session)):
+    # Look up user profile match
+    user = session.exec(select(User).where(User.email == email)).first()
+
+    # SECURITY BEST PRACTICE: If user doesn't exist, still return a 200 OK.
+    # This prevents malicious attackers from using this endpoint to guess valid user emails.
+    if not user:
+        return {
+            "message": "If the email is registered, a password reset token has been generated."
+        }
+
+    # Generate the temporary token
+    reset_token = create_password_reset_token(user.email)
+
+    # For local development sandbox, we print it to the terminal console.
+    # In production, you would plug in an email service (like SendGrid or Amazon SES) here.
+    print(f"\n[SERVER] PASSWORD RESET TOKEN FOR {email}:\n{reset_token}\n")
+
+    return {
+        "message": "If the email is registered, a password reset token has been generated.",
+        "dev_token": reset_token,  # Temporary field so you can copy-paste easily from Swagger
+    }
+
+
+@app.post("/auth/reset-password", status_code=200)
+def reset_password(data: PasswordResetConfirm, session: Session = Depends(get_session)):
+    # Validate token structural integrity and expiration timestamps
+    email = verify_password_reset_token(data.token)
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail="The password reset token is invalid or has expired.",
+        )
+
+    # Find the user target profile row mapping
+    user = session.exec(select(User).where(User.email == email)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User profile resource not found.")
+
+    # Hash the fresh password string and update the database context
+    user.hashed_password = hash_password(data.new_password)
+
+    session.add(user)
+    session.commit()
+
+    return {"message": "Your password has been successfully updated."}

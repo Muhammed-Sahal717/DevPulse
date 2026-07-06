@@ -13,10 +13,12 @@ class User(SQLModel, table=True):
 
     projects: List["Project"] = Relationship(back_populates="user")
 
+
 # INBOUND SCHEMA: For registration and login inputs
 class UserCreate(SQLModel):
     email: str
     password: str
+
 
 # OUTBOUND SCHEMA: Safe user response data (never return the password!)
 class UserResponse(SQLModel):
@@ -24,12 +26,16 @@ class UserResponse(SQLModel):
     email: str
     created_at: datetime
 
+
 # TOKEN SCHEMA: What we send back after a successful login
 class TokenResponse(SQLModel):
     access_token: str
-    token_type: str = "bearer" # The default value for the token type is set to "bearer",
+    token_type: str = (
+        "bearer"  # The default value for the token type is set to "bearer",
+    )
     # This is a common convention for OAuth2 access tokens, indicating that the token is a bearer token that can be used to access protected resources on behalf of the user.
     # This is important for clients to know how to use the token when making authenticated requests to the API.
+
 
 class Project(SQLModel, table=True):
     id: Optional[int] = Field(
@@ -43,7 +49,7 @@ class Project(SQLModel, table=True):
     # FOREIGN KEY: Links this project to the specific User who owns it
     user_id: int = Field(foreign_key="user.id", ondelete="CASCADE")
 
-    user : User = Relationship(back_populates="projects")
+    user: User = Relationship(back_populates="projects")
     # back_populates means: "If I modify this list, update the 'project' attribute on the Task side too."
     tasks: List["Task"] = Relationship(back_populates="project")
 
@@ -104,3 +110,9 @@ class DailyLogCreate(SQLModel):
     bugs_resolved: Optional[int] = 0
     summary: str
     project_id: int
+
+
+# INBOUND SCHEMA: For resetting the password with a verified token
+class PasswordResetConfirm(SQLModel):
+    token: str
+    new_password: str

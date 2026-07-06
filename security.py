@@ -10,6 +10,7 @@ import jwt
 JWT_SECRET = os.getenv("JWT_SECRET", "super-duper-secret-dev-key-change-this")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
+RESET_TOKEN_EXPIRE_MINUTES = 15
 
 
 def hash_password(password: str) -> str:
@@ -53,6 +54,29 @@ def verify_access_token(token: str) -> Optional[dict]:
         # Decode and verify the signature + expiration time automatically
         payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
         return payload
-    except (jwt.PyJWTError, KeyError):
+    except jwt.PyJWTError, KeyError:
         # Catches expired tokens, malformed signatures, or tampering attempts safely
+        return None
+
+
+def create_password_reset_token(email: str) -> str:
+    """Generates a highly secure, short-lived JWT token for password resets."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
+    payload = {
+        "sub": email,
+        "exp": expire,
+        "action": "password_reset",  # Strict intent isolation  
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=ALGORITHM)
+
+
+def verify_password_reset_token(token: str) -> Optional[str]:
+    """Validates the reset token and returns the embedded email address if successful."""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+        # Ensure it's explicitly a password reset token
+        if payload.get("action") != "password_reset":
+            return None
+        return payload.get("sub")
+    except jwt.PyJWTError, KeyError:
         return None
