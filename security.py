@@ -4,7 +4,9 @@ from typing import Optional
 
 import bcrypt
 import jwt
+from dotenv import load_dotenv
 
+load_dotenv()
 # 1. Setup token signing variables from the environment
 # Make sure to keep your fallback values safe
 JWT_SECRET = os.getenv("JWT_SECRET", "super-duper-secret-dev-key-change-this")
@@ -65,7 +67,7 @@ def create_password_reset_token(email: str) -> str:
     payload = {
         "sub": email,
         "exp": expire,
-        "action": "password_reset",  # Strict intent isolation  
+        "action": "password_reset",  # Strict intent isolation
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=ALGORITHM)
 

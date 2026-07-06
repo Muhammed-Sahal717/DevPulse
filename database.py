@@ -1,12 +1,19 @@
 import os
 from typing import Annotated
 
+from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import Session, create_engine
 
 from models import User
 from security import verify_access_token
+
+# Load environment variables from .env file
+load_dotenv()
+
+print("Loaded environment variables:")
+print(f".env debugging: {os.getenv('DB_USER')}")
 
 DB_USER = os.getenv("DB_USER", "sahal")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "sahalprojects9078")

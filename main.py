@@ -3,11 +3,13 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
 from database import get_current_user, get_session
+from email_service import send_reset_password_email
 
 # Import models so SQLModel registers them
 from models import (
     DailyLog,
     DailyLogCreate,
+    PasswordResetConfirm,
     Project,
     ProjectCreate,
     Task,
@@ -16,7 +18,6 @@ from models import (
     User,
     UserCreate,
     UserResponse,
-    PasswordResetConfirm
 )
 
 # Import security helper blocks
@@ -264,27 +265,28 @@ def read_daily_logs(
 
 
 @app.post("/auth/forgot-password", status_code=200)
-def forgot_password(email: str, session: Session = Depends(get_session)):
-    # Look up user profile match
+async def forgot_password(email: str, session: Session = Depends(get_session)):
     user = session.exec(select(User).where(User.email == email)).first()
 
-    # SECURITY BEST PRACTICE: If user doesn't exist, still return a 200 OK.
-    # This prevents malicious attackers from using this endpoint to guess valid user emails.
+    # Defensive check remains identical to preserve security obfuscation barriers
     if not user:
         return {
-            "message": "If the email is registered, a password reset token has been generated."
+            "message": "If the email is registered, a password reset link has been dispatched."
         }
 
-    # Generate the temporary token
+    # Generate the security token hash
     reset_token = create_password_reset_token(user.email)
 
-    # For local development sandbox, we print it to the terminal console.
-    # In production, you would plug in an email service (like SendGrid or Amazon SES) here.
-    print(f"\n[SERVER] PASSWORD RESET TOKEN FOR {email}:\n{reset_token}\n")
+    # PRODUCTION EMAIL TRIGGER: Await the background network handshake
+    try:
+        await send_reset_password_email(user.email, reset_token)
+    except Exception as e:
+        # Prevent internal mailing infrastructure connection errors from breaking the user flow
+        print(f"[SERVER ERROR] Failed to deliver notification mail: {e}")
+        raise HTTPException(status_code=500, detail="Email delivery engine failed.")
 
     return {
-        "message": "If the email is registered, a password reset token has been generated.",
-        "dev_token": reset_token,  # Temporary field so you can copy-paste easily from Swagger
+        "message": "If the email is registered, a password reset link has been dispatched."
     }
 
 
