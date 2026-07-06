@@ -14,10 +14,10 @@ app = FastAPI(
 
 
 # This event runner triggers exactly when the API boots up
-@app.on_event("startup")
-def on_startup():
-    # This creates our tables in PostgreSQL if they don't exist yet!
-    SQLModel.metadata.create_all(engine)
+# @app.on_event("startup")
+# def on_startup():
+#     # This creates our tables in PostgreSQL if they don't exist yet!
+#     SQLModel.metadata.create_all(engine)
 
 
 @app.get("/")
