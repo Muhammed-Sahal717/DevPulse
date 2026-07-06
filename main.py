@@ -9,11 +9,14 @@ from email_service import send_reset_password_email
 from models import (
     DailyLog,
     DailyLogCreate,
+    DailyLogUpdate,
     PasswordResetConfirm,
     Project,
     ProjectCreate,
+    ProjectUpdate,
     Task,
     TaskCreate,
+    TaskUpdate,
     TokenResponse,
     User,
     UserCreate,
@@ -178,6 +181,48 @@ def read_project(
     return project
 
 
+@app.patch("/projects/{project_id}", response_model=Project)
+def update_project(
+    project_id: int,
+    project_data: ProjectUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    db_project = session.get(Project, project_id)
+    if not db_project or db_project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=404, detail="Project not found or unauthorized."
+        )
+
+    # Extract incoming payload and apply partial updates to database state records
+    update_dict = project_data.model_dump(exclude_unset=True)
+    db_project.sqlmodel_update(update_dict)
+
+    session.add(db_project)
+    session.commit()
+    session.refresh(db_project)
+    return db_project
+
+
+@app.delete("/projects/{project_id}", status_code=200)
+def delete_project(
+    project_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    db_project = session.get(Project, project_id)
+    if not db_project or db_project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=404, detail="Project not found or unauthorized."
+        )
+
+    session.delete(db_project)
+    session.commit()
+    return {
+        "message": f"Project '{db_project.name}' and all associated tasks deleted successfully."
+    }
+
+
 @app.post("/tasks", response_model=Task, status_code=201)
 def create_task(
     task_data: TaskCreate,
@@ -222,6 +267,41 @@ def read_project_tasks(
     return project.tasks
 
 
+@app.patch("/tasks/{task_id}", response_model=Task)
+def update_task(
+    task_id: int,
+    task_data: TaskUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    db_task = session.get(Task, task_id)
+    if not db_task or db_task.project.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Task not found or unauthorized.")
+
+    update_dict = task_data.model_dump(exclude_unset=True)
+    db_task.sqlmodel_update(update_dict)
+
+    session.add(db_task)
+    session.commit()
+    session.refresh(db_task)
+    return db_task
+
+
+@app.delete("/tasks/{task_id}", status_code=200)
+def delete_task(
+    task_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    db_task = session.get(Task, task_id)
+    if not db_task or db_task.project.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Task not found or unauthorized.")
+
+    session.delete(db_task)
+    session.commit()
+    return {"message": "Task deleted successfully."}
+
+
 @app.post("/logs", response_model=DailyLog, status_code=200)
 def create_daily_log(
     log_data: DailyLogCreate,
@@ -257,11 +337,50 @@ def read_daily_logs(
     statement = (
         select(DailyLog)
         .join(Project)
-        .where(DailyLog.user_id == current_user.id)
+        .where(Project.user_id == current_user.id)
         .offset(offset)
         .limit(limit)
     )
     return session.exec(statement).all()
+
+
+@app.patch("/logs/{log_id}", response_model=DailyLog)
+def update_daily_log(
+    log_id: int,
+    log_data: DailyLogUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    db_log = session.get(DailyLog, log_id)
+    if not db_log or db_log.project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=404, detail="Daily log entry not found or unauthorized."
+        )
+
+    update_dict = log_data.model_dump(exclude_unset=True)
+    db_log.sqlmodel_update(update_dict)
+
+    session.add(db_log)
+    session.commit()
+    session.refresh(db_log)
+    return db_log
+
+
+@app.delete("/logs/{log_id}", status_code=200)
+def delete_daily_log(
+    log_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    db_log = session.get(DailyLog, log_id)
+    if not db_log or db_log.project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=404, detail="Daily log entry not found or unauthorized."
+        )
+
+    session.delete(db_log)
+    session.commit()
+    return {"message": "Daily log entry deleted successfully."}
 
 
 @app.post("/auth/forgot-password", status_code=200)

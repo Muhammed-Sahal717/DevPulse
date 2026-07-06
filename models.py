@@ -62,6 +62,12 @@ class ProjectCreate(
     repository_url: Optional[str] = None
 
 
+class ProjectUpdate(SQLModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    repository_url: Optional[str] = None
+
+
 class Task(SQLModel, table=True):
     id: Optional[int] = Field(
         default=None, primary_key=True
@@ -87,6 +93,12 @@ class TaskCreate(
     project_id: int
 
 
+class TaskUpdate(SQLModel):
+    title: Optional[str] = None
+    status: Optional[str] = None  # "todo", "progress", "done"
+    priority: Optional[str] = None  # "low", "medium", "high"
+
+
 class DailyLog(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     date: datetime = Field(
@@ -110,6 +122,13 @@ class DailyLogCreate(SQLModel):
     bugs_resolved: Optional[int] = 0
     summary: str
     project_id: int
+
+
+class DailyLogUpdate(SQLModel):
+    lines_written: Optional[int] = None
+    hours_spent: Optional[float] = None
+    bugs_resolved: Optional[int] = None
+    summary: Optional[str] = None
 
 
 # INBOUND SCHEMA: For resetting the password with a verified token
