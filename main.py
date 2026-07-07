@@ -136,7 +136,7 @@ def create_project(
     session.refresh(db_project)
 
     if db_project.repository_url:
-        background_tasks.add_task(fetch_mock_repository_stats, db_project.id)
+        background_tasks.add_task(fetch_data_repository_stats, db_project.id)
 
     # 5. Return the full database record back to the frontend
     return db_project
