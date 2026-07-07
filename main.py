@@ -1,6 +1,7 @@
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
+from fastapi.middleware.cors import CORSMiddleware
 
 from aggregator import fetch_data_repository_stats
 from database import get_current_user, get_session
@@ -39,6 +40,13 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Permit Vite local browser access
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow GET, POST, OPTIONS, PATCH, DELETE
+    allow_headers=["*"],  # Allow headers like Authorization and Content-Type
+)
 
 # This event runner triggers exactly when the API boots up
 # @app.on_event("startup")

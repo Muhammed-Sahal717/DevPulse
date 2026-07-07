@@ -27,7 +27,7 @@ async def send_reset_password_email(email_to: str, token: str):
     """Asynchronously dispatches a formatted HTML password recovery link to the user."""
     # 2. Build the production URL link that your React frontend will host
     # For now, we direct them to a placeholder frontend route passing the query token
-    reset_link = f"http://localhost:3000/reset-password?token={token}"
+    reset_link = f"http://localhost:5173/reset-password?token={token}"
 
     # 3. Design an attractive, clear HTML message layout frame
     html_content = f"""
