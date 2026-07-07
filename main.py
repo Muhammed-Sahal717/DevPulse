@@ -116,6 +116,7 @@ def login_user(
 @app.post("/projects", response_model=Project, status_code=201)
 def create_project(
     project_data: ProjectCreate,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -133,6 +134,9 @@ def create_project(
 
     # 4. Refresh our local variable so it grabs the DB-generated ID and timestamp
     session.refresh(db_project)
+
+    if db_project.repository_url:
+        background_tasks.add_task(fetch_mock_repository_stats, db_project.id)
 
     # 5. Return the full database record back to the frontend
     return db_project
