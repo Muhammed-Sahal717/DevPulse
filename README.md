@@ -36,12 +36,22 @@ backend/
 └── migrations/            # Alembic migration scripts reflecting schema changes over time
 ```
 
+## Core Workflow & Data Flow
+
+DevPulse connects local developer productivity with remote version control. The architectural flow operates as follows:
+
+1. **Project Initialization**: When a user creates a project via the frontend, the backend validates the repository URL and instantly dispatches a background task (`aggregator.py`) to fetch baseline telemetry (e.g., total stars, open issues) without blocking the HTTP response.
+2. **Session Tracking**: Users start a task timer on the frontend. The backend records a precision UTC timestamp. When the timer is stopped, the backend calculates the exact duration delta.
+3. **Real-Time Webhook Pipeline**: While the session runs, the user writes code locally and pushes it to a remote GitHub repository. GitHub triggers a push event to the backend's `POST /webhooks/github` endpoint.
+4. **Data Ingestion & Extraction**: The backend validates the webhook's HMAC SHA-256 signature, extracts the latest commit message, and dynamically polls the GitHub API for exact line addition counts for each commit in the payload. It then updates the project state and persists the added lines to the `DailyProjectMetric` table.
+5. **Log Generation**: When the user concludes their session on the frontend, the client immediately requests the current state of the `DailyProjectMetric` table. The backend returns the pre-calculated metrics, allowing the frontend to generate a comprehensive Daily Log without manual data entry.
+
 ## Key Features & Implementations
 
 1. **Robust Authentication**: Implements OAuth2 with Password (and hashing) for secure JWT-based stateless authentication (`security.py`).
 2. **Database Modeling**: Strict schema definition and validation using SQLModel, tracking relations between Users, Projects, Tasks, and Logs (`models.py`).
 3. **Session Time Tracking**: Endpoints to start and stop task timers, computing exact durations (deltas) accurately via UTC timestamps.
-4. **External GitHub Integration**: Asynchronously interfaces with the GitHub REST API (`aggregator.py` and `main.py`) to fetch live commit history and accurately calculate "Lines of Code" (LOC) added per session.
+4. **GitHub Webhook Integration (Real-Time)**: Instead of slow API polling, the backend exposes a secure `POST /webhooks/github` endpoint. When a user pushes code to GitHub, GitHub instantly sends a webhook payload. The backend uses HMAC SHA-256 signature validation to ensure security, dynamically calculates the lines of code added, and persists this metric in a `DailyProjectMetric` table for instant frontend retrieval.
 5. **Database Migrations**: Utilizes Alembic to safely handle schema evolution and database state transitions.
 6. **Mock Data Seeding**: Provides a `seed.py` script to rapidly populate a local PostgreSQL instance with test data for streamlined frontend UI development.
 
