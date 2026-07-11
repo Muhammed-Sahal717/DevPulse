@@ -88,6 +88,10 @@ class Task(SQLModel, table=True):
     # RELATIONSHIP: Allows us to easily type `task.project` to get the full parent object
     project: Project = Relationship(back_populates="tasks")
 
+    # TIME TRACKING
+    session_start_time: Optional[datetime] = Field(default=None)
+    time_spent: float = Field(default=0.0)  # In hours
+
 
 class TaskCreate(
     SQLModel

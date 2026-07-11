@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
@@ -320,6 +321,53 @@ def delete_task(
     session.delete(db_task)
     session.commit()
     return {"message": "Task deleted successfully."}
+
+
+@app.post("/tasks/{task_id}/start_timer", response_model=Task)
+def start_task_timer(
+    task_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    db_task = session.get(Task, task_id)
+    if not db_task or db_task.project.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Task not found or unauthorized.")
+        
+    db_task.session_start_time = datetime.now(timezone.utc)
+    session.add(db_task)
+    session.commit()
+    session.refresh(db_task)
+    return db_task
+
+
+@app.post("/tasks/{task_id}/stop_timer", response_model=Task)
+def stop_task_timer(
+    task_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    db_task = session.get(Task, task_id)
+    if not db_task or db_task.project.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Task not found or unauthorized.")
+        
+    if not db_task.session_start_time:
+        raise HTTPException(status_code=400, detail="Timer was not started for this task.")
+        
+    # Ensure session_start_time is timezone-aware if the DB returns it naive
+    start_time = db_task.session_start_time
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+        
+    time_diff = datetime.now(timezone.utc) - start_time
+    hours_spent = time_diff.total_seconds() / 3600.0
+    
+    db_task.time_spent += hours_spent
+    db_task.session_start_time = None
+    
+    session.add(db_task)
+    session.commit()
+    session.refresh(db_task)
+    return db_task
 
 
 @app.post("/logs", response_model=DailyLog, status_code=200)
