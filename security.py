@@ -56,7 +56,7 @@ def verify_access_token(token: str) -> Optional[dict]:
         # Decode and verify the signature + expiration time automatically
         payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
         return payload
-    except jwt.PyJWTError, KeyError:
+    except (jwt.PyJWTError, KeyError):
         # Catches expired tokens, malformed signatures, or tampering attempts safely
         return None
 
@@ -80,5 +80,5 @@ def verify_password_reset_token(token: str) -> Optional[str]:
         if payload.get("action") != "password_reset":
             return None
         return payload.get("sub")
-    except jwt.PyJWTError, KeyError:
+    except (jwt.PyJWTError, KeyError):
         return None
