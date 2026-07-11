@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+import httpx
+from urllib.parse import urlparse
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
@@ -242,6 +244,58 @@ def delete_project(
     return {
         "message": f"Project '{db_project.name}' and all associated tasks deleted successfully."
     }
+
+
+@app.get("/projects/{project_id}/github/loc")
+async def get_github_loc(
+    project_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    project = session.get(Project, project_id)
+    if not project or project.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Project not found or unauthorized.")
+        
+    if not project.repository_url:
+        return {"lines_written": 0}
+        
+    try:
+        url_path = urlparse(project.repository_url).path.strip("/")
+        path_parts = url_path.split("/")
+        if len(path_parts) < 2:
+            return {"lines_written": 0}
+            
+        username, repo_name = path_parts[0], path_parts[1]
+        
+        # Get midnight today UTC
+        now = datetime.now(timezone.utc)
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        since_iso = midnight.isoformat()
+        
+        commits_url = f"https://api.github.com/repos/{username}/{repo_name}/commits?since={since_iso}"
+        
+        async with httpx.AsyncClient() as client:
+            commits_res = await client.get(commits_url)
+            if commits_res.status_code != 200:
+                return {"lines_written": 0}
+                
+            commits = commits_res.json()
+            total_additions = 0
+            
+            # Fetch individual commit stats (limit to max 5 to prevent rate limiting)
+            for commit in commits[:5]:
+                commit_url = commit.get("url")
+                if commit_url:
+                    detail_res = await client.get(commit_url)
+                    if detail_res.status_code == 200:
+                        stats = detail_res.json().get("stats", {})
+                        total_additions += stats.get("additions", 0)
+                        
+            return {"lines_written": total_additions}
+            
+    except Exception as e:
+        print(f"Error fetching GitHub LOC: {e}")
+        return {"lines_written": 0}
 
 
 @app.post("/tasks", response_model=Task, status_code=201)
