@@ -352,7 +352,15 @@ async def github_webhook(
             )
             
         session.add(metric)
-        session.commit()
+        
+    # Also update the project's latest commit message dynamically from the push payload!
+    if commits:
+        latest_message = commits[-1].get("message")
+        if latest_message:
+            project.last_commit_message = latest_message.split("\n")[0]
+            session.add(project)
+            
+    session.commit()
 
     return {"status": "success", "lines_added": total_additions}
 
