@@ -325,16 +325,21 @@ async def github_webhook(
 
     total_additions = 0
     commits = payload.get("commits", [])
+    repo_full_name = payload["repository"].get("full_name")
     
     # The payload does not contain exact additions, so we must fetch each commit's stats
     async with httpx.AsyncClient() as client:
         for commit in commits:
-            commit_url = commit.get("url") # e.g. https://api.github.com/repos/.../commits/{sha}
-            if commit_url:
-                detail_res = await client.get(commit_url)
-                if detail_res.status_code == 200:
-                    stats = detail_res.json().get("stats", {})
-                    total_additions += stats.get("additions", 0)
+            commit_id = commit.get("id")
+            if commit_id and repo_full_name:
+                commit_api_url = f"https://api.github.com/repos/{repo_full_name}/commits/{commit_id}"
+                try:
+                    detail_res = await client.get(commit_api_url)
+                    if detail_res.status_code == 200:
+                        stats = detail_res.json().get("stats", {})
+                        total_additions += stats.get("additions", 0)
+                except Exception as e:
+                    print(f"🔔 [WEBHOOK] Error fetching stats for commit {commit_id}: {e}")
 
     if total_additions > 0:
         today = datetime.now(timezone.utc).date()
