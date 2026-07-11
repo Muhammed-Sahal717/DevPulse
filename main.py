@@ -6,7 +6,7 @@ import hashlib
 from urllib.parse import urlparse
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Header
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func
 from fastapi.middleware.cors import CORSMiddleware
 
 from aggregator import fetch_data_repository_stats
@@ -308,16 +308,20 @@ async def github_webhook(
         return {"status": "ignored", "reason": "Not a push event or missing data"}
         
     repo_url = payload["repository"].get("html_url")
+    print(f"🔔 [WEBHOOK] Received push event for repo: {repo_url}")
     if not repo_url:
         return {"status": "ignored", "reason": "No repo URL"}
         
-    # Find matching project in our database
+    # Find matching project in our database (case-insensitive!)
     project = session.exec(
-        select(Project).where(Project.repository_url == repo_url)
+        select(Project).where(func.lower(Project.repository_url) == repo_url.lower())
     ).first()
     
     if not project:
+        print(f"🔔 [WEBHOOK] Project {repo_url} not found in DB!")
         return {"status": "ignored", "reason": "Project not tracked in DevPulse"}
+
+    print(f"🔔 [WEBHOOK] Match found! Updating project ID {project.id} ({project.name})")
 
     total_additions = 0
     commits = payload.get("commits", [])
