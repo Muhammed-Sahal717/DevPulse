@@ -68,3 +68,6 @@ def seed_db():
 
 if __name__ == "__main__":
     seed_db()
+
+
+# Test : webhook: python3 seed.py add-daily-metrics 1
