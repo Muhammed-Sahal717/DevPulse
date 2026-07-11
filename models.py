@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from typing import List, Optional
 
 from sqlmodel import Field, Relationship, SQLModel
@@ -144,3 +144,13 @@ class DailyLogUpdate(SQLModel):
 class PasswordResetConfirm(SQLModel):
     token: str
     new_password: str
+
+
+class DailyProjectMetric(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", ondelete="CASCADE", index=True)
+    date_recorded: date = Field(index=True)
+    lines_added: int = Field(default=0)
+    
+    # Relationship to Project
+    project: Project = Relationship()

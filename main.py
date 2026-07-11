@@ -1,7 +1,10 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 import httpx
+import os
+import hmac
+import hashlib
 from urllib.parse import urlparse
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Header
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +29,7 @@ from models import (
     User,
     UserCreate,
     UserResponse,
+    DailyProjectMetric,
 )
 
 # Import security helper blocks
@@ -259,44 +263,98 @@ async def get_github_loc(
     if not project.repository_url:
         return {"lines_written": 0}
         
-    try:
-        url_path = urlparse(project.repository_url).path.strip("/")
-        path_parts = url_path.split("/")
-        if len(path_parts) < 2:
-            return {"lines_written": 0}
-            
-        username, repo_name = path_parts[0], path_parts[1]
+    # Get midnight today UTC
+    today = datetime.now(timezone.utc).date()
+    
+    # Query the database instead of asking GitHub API directly!
+    metric = session.exec(
+        select(DailyProjectMetric)
+        .where(DailyProjectMetric.project_id == project.id)
+        .where(DailyProjectMetric.date_recorded == today)
+    ).first()
+    
+    if metric:
+        return {"lines_written": metric.lines_added}
         
-        # Get midnight today UTC
-        now = datetime.now(timezone.utc)
-        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        since_iso = midnight.isoformat()
-        
-        commits_url = f"https://api.github.com/repos/{username}/{repo_name}/commits?since={since_iso}"
-        
-        async with httpx.AsyncClient() as client:
-            commits_res = await client.get(commits_url)
-            if commits_res.status_code != 200:
-                return {"lines_written": 0}
-                
-            commits = commits_res.json()
-            total_additions = 0
-            
-            # Fetch individual commit stats (limit to max 5 to prevent rate limiting)
-            for commit in commits[:5]:
-                commit_url = commit.get("url")
-                if commit_url:
-                    detail_res = await client.get(commit_url)
-                    if detail_res.status_code == 200:
-                        stats = detail_res.json().get("stats", {})
-                        total_additions += stats.get("additions", 0)
-                        
-            return {"lines_written": total_additions}
-            
-    except Exception as e:
-        print(f"Error fetching GitHub LOC: {e}")
-        return {"lines_written": 0}
+    return {"lines_written": 0}
 
+
+@app.post("/webhooks/github")
+async def github_webhook(
+    request: Request,
+    x_hub_signature_256: str = Header(None),
+    session: Session = Depends(get_session),
+):
+    # 1. SECURITY: Validate that this request actually came from GitHub!
+    secret = os.getenv("GITHUB_WEBHOOK_SECRET")
+    if not secret:
+        raise HTTPException(status_code=500, detail="Server webhook secret not configured")
+        
+    if not x_hub_signature_256:
+        raise HTTPException(status_code=401, detail="Missing signature")
+        
+    payload_body = await request.body()
+    signature = hmac.new(secret.encode(), payload_body, hashlib.sha256).hexdigest()
+    expected_signature = f"sha256={signature}"
+    
+    if not hmac.compare_digest(x_hub_signature_256, expected_signature):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    # 2. PARSE PAYLOAD
+    payload = await request.json()
+    
+    # We only care about push events
+    if "commits" not in payload or "repository" not in payload:
+        return {"status": "ignored", "reason": "Not a push event or missing data"}
+        
+    repo_url = payload["repository"].get("html_url")
+    if not repo_url:
+        return {"status": "ignored", "reason": "No repo URL"}
+        
+    # Find matching project in our database
+    project = session.exec(
+        select(Project).where(Project.repository_url == repo_url)
+    ).first()
+    
+    if not project:
+        return {"status": "ignored", "reason": "Project not tracked in DevPulse"}
+
+    total_additions = 0
+    commits = payload.get("commits", [])
+    
+    # The payload does not contain exact additions, so we must fetch each commit's stats
+    async with httpx.AsyncClient() as client:
+        for commit in commits:
+            commit_url = commit.get("url") # e.g. https://api.github.com/repos/.../commits/{sha}
+            if commit_url:
+                detail_res = await client.get(commit_url)
+                if detail_res.status_code == 200:
+                    stats = detail_res.json().get("stats", {})
+                    total_additions += stats.get("additions", 0)
+
+    if total_additions > 0:
+        today = datetime.now(timezone.utc).date()
+        
+        # Check if we already have a metric row for today
+        metric = session.exec(
+            select(DailyProjectMetric)
+            .where(DailyProjectMetric.project_id == project.id)
+            .where(DailyProjectMetric.date_recorded == today)
+        ).first()
+        
+        if metric:
+            metric.lines_added += total_additions
+        else:
+            metric = DailyProjectMetric(
+                project_id=project.id,
+                date_recorded=today,
+                lines_added=total_additions
+            )
+            
+        session.add(metric)
+        session.commit()
+
+    return {"status": "success", "lines_added": total_additions}
 
 @app.post("/tasks", response_model=Task, status_code=201)
 def create_task(
